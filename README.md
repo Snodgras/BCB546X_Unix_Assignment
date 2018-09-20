@@ -86,9 +86,126 @@ Make 22 files total:
 * 1 file with all SNPs with multiple positions in the genome (no particular order necessary)
 	
 ###Workflow
-* check to see if the file is sorted `sort -c | echo $?`
-* `sort -V` allows you to detect numbers in strings
-* `grep -v "^#" Mus_musclus.GRCm38.75_chr1.gtf | cut -f3 |sort | uniq -c | sort -n` means grab everything except a header (line that starts with #), cut so only the 3 column remains, sort and then count uniqs, then sort by increasing number/counts
-* `join -1 1 -2 1 example_sorted.bed example_lengths.txt > example_with_lengths.txt` look at file 1 column 1, file 2 column 1 and join them based on those values and send to new file.
-* After a join inspect the new file to make sure everything was joined `wc -l files`
-* `sed` as a find and replace command, though capable of more
+
+####Extract the teosinte and maize information from the full genotype dataset. 
+
+Determine the number of maize individuals (1573)
+
+```
+$ grep -c "ZMMIL" fang_et_al_genotypes.txt
+290
+$ grep -c "ZMMLR" fang_et_al_genotypes.txt 
+1256
+$ grep -c "ZMMMR" fang_et_al_genotypes.txt 
+27
+```
+
+Determine the number of teosinte individuals (975)
+
+```
+$  grep -c "ZMPBA" fang_et_al_genotypes.txt 
+900
+$  grep -c "ZMPIL" fang_et_al_genotypes.txt 
+41
+$  grep -c "ZMPJA" fang_et_al_genotypes.txt 
+34
+```
+
+Save the column names from the parental file `fang_et_al_genotype.txt` and create new .txt files for maize and teosinte genotype data. Use `$ grep` to pull out the lines for the group identifers of maize (ZMMIL, ZMMLR, ZMMMR) and teosinte (ZMPBA, ZMPIL, ZMPJA) and add to respective, new genotype files.
+
+```
+[snodgras@hpc-class UNIX_Assignment]$ head -n 1 fang_et_al_genotypes.txt > maize_genotypes.txt
+[snodgras@hpc-class UNIX_Assignment]$ head -n 1 fang_et_al_genotypes.txt > teosinte_genotypes.txt
+[snodgras@hpc-class UNIX_Assignment]$ grep "ZMMIL" fang_et_al_genotypes.txt >> maize_genotypes.txt
+[snodgras@hpc-class UNIX_Assignment]$ grep "ZMMLR" fang_et_al_genotypes.txt >> maize_genotypes.txt
+[snodgras@hpc-class UNIX_Assignment]$ grep "ZMMMR" fang_et_al_genotypes.txt >> maize_genotypes.txt
+[snodgras@hpc-class UNIX_Assignment]$ grep "ZMPBA" fang_et_al_genotypes.txt >> teosinte_genotypes.txt
+[snodgras@hpc-class UNIX_Assignment]$ grep "ZMPIL" fang_et_al_genotypes.txt >> teosinte_genotypes.txt
+[snodgras@hpc-class UNIX_Assignment]$ grep "ZMPJA" fang_et_al_genotypes.txt >> teosinte_genotypes.txt
+```
+
+####Join the genotype and position data files
+Transpose the genotype data and quality check number of lines
+
+```
+[snodgras@hpc-class UNIX_Assignment]$ awk -f transpose.awk maize_genotypes.txt > transposed_maize_genotypes.txt
+[snodgras@hpc-class UNIX_Assignment]$ awk -f transpose.awk teosinte_genotypes.txt > transposed_teosinte_genotypes.txt
+[snodgras@hpc-class UNIX_Assignment]$ wc transposed_maize_genotypes.txt 
+    986 1551964 6250961 transposed_maize_genotypes.txt
+[snodgras@hpc-class UNIX_Assignment]$ wc transposed_teosinte_genotypes.txt 
+    986  962336 3884185 transposed_teosinte_genotypes.txt
+```
+
+sorting files: use `tail` to remove metadata and column name information %and then sort only the data containing lines
+
+```
+#Maize
+$ head transposed_maize_genotype.txt # see that data doesn't start until line 4
+[snodgras@hpc-class UNIX_Assignment]$ tail -n +4 transposed_maize_genotypes.txt > headerless_maize_genotypes.txt
+[snodgras@hpc-class UNIX_Assignment]$ echo $?
+0
+[snodgras@hpc-class UNIX_Assignment]$ tail -n +2 snp_position.txt > headerless_snp_position.txt
+[snodgras@hpc-class UNIX_Assignment]$ echo $?
+0
+#Teosinte
+[snodgras@hpc-class UNIX_Assignment]$ cut -f 1-3 transposed_teosinte_genotypes.txt | head # shows data doesn't start until line 4
+[snodgras@hpc-class UNIX_Assignment]$ tail -n +4 transposed_teosinte_genotypes.txt > headerless_teosinte.txt
+```
+
+joining files
+
+```
+#Maize
+[snodgras@hpc-class UNIX_Assignment]$ join -t $'\t' -1 1 -2 1 headerless_snp_position.txt headerless_maize_genotypes.txt > maize_genotypes_positions_all.txt 2> join_std_error.txt
+[snodgras@hpc-class UNIX_Assignment]$ echo $?
+0
+#Teosinte
+[snodgras@hpc-class UNIX_Assignment]$ join -t $'\t' -1 1 -2 1 headerless_snp_position.txt headerless_teosinte.txt > teosinte_genotypes_positions_all.txt
+[snodgras@hpc-class UNIX_Assignment]$ echo $?
+0
+```
+
+####Make individual chromosome files for maize and teosinte
+The command searches the 3rd  field (chromosome) for a number then prints the entire line with an output field seperator tab and writes the standard output to a new file.
+
+```
+$ awk '$3 ~ /1/ {OFS="\t";print $0}' maize_genotypes_positions_all.txt > maize_genotypes_positions_Chr1.txt # repeat for each chromosome, changing the 1 to the next chromosome number 
+$ awk '$3 ~ /1/ {OFS="\t";print $0}' teosinte_genotypes_positions_all.txt > teosinte_genotypes_positions_Chr1.txt # repeat for each chromosome, changing the 1 to the next chromosome number
+```
+####Sort the chromosome files increasing and decreasing with appropriate missing value symbols
+
+Sort by position increasing
+
+```
+$ sort -k4,4V maize_genotypes_positions_Chr1.txt | cut -f 1-5 | head/tail #for inspecting to make sure it worked
+$ for i in maize_genotypes_positions_Chr*; do sort -k4,4V $i > sorted_inc_$i; done
+$ for i in teosinte_genotypes_positions_Chr*; do sort -k4,4V $i > sorted_inc_$i; done
+```
+
+Sort by position decreasing
+
+```
+$ sort -k4,4 -r maize_genotypes_positions_Chr1.txt | cut -f 1-5 | head
+$ for i in maize_genotypes_positions_Chr*; do sort -k4,4 -r $i > sorted_dec_$i; done
+$ for i in teosinte_genotypes_positions_Chr*; do sort -k4,4 -r $i > sorted_dec_$i; done
+```
+Change symbols for the missing data of the decreasing files to "-"
+
+```
+$ for i in sorted_dec_maize_genotypes_positions_Chr*; do sed 's/?/-/g' $i > new_$i; done 
+$ for i in sorted_dec_teosinte_genotypes_positions_Chr*; do sed 's/?/-/g' $i > new_$i; done 
+```
+
+Create a file for all unknown positions
+
+```
+$ grep 'unknown' maize_genotypes_positions_all.txt > maize_genotypes_positions_unknown.txt 
+$ grep 'unknown' teosinte_genotypes_positions_all.txt > teosinte_genotypes_positions_unknown.txt
+```
+
+Create a file for all multiple positions
+
+```
+$ grep 'multiple' maize_genotypes_positions_all.txt > maize_genotypes_positions_multiple.txt
+$ grep 'multiple' teosinte_genotypes_positions_all.txt > teosinte_genotypes_positions_multiple.txt
+```
