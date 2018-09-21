@@ -209,3 +209,5 @@ Create a file for all multiple positions
 $ grep 'multiple' maize_genotypes_positions_all.txt > maize_genotypes_positions_multiple.txt
 $ grep 'multiple' teosinte_genotypes_positions_all.txt > teosinte_genotypes_positions_multiple.txt
 ```
+
+Headers added back in manually by taking `head -n 1` of `snp_position.txt` and adding the `head -n 1` of `transposed_maize_genotypes.txt` for maize files and `transposed_teosinte_genotypes.txt` for teosinte files (subtracting the common column 1). I realize this is a brittle solution. In retrospect, I would have sorted by position in the `*genotypes_positions_all.txt` files first, added the header back in, and then broken them out to individual chromosome files. Did not have time to redo it this way, hence the more brittle solution of manual changes. 
